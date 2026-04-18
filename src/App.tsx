@@ -277,7 +277,7 @@ function App() {
         {activeCategories.map(category => (
           <div key={category} className="table-container">
             <div className="category-header">
-              <div className="category-header-title"><FolderTree size={20} color="var(--primary-color)" />{category}</div>
+              <div className="category-header-title"><FolderTree size={20} color="#ea580c" />{category}</div>
               <div className="category-header-actions">
                 <button className="btn-icon" onClick={() => openEditCategory(category)}><Pencil size={16} /></button>
                 <button className="btn-icon danger" onClick={() => setDeleteModal({ isOpen: true, type: 'category', targetId: category, targetName: category })}><Trash2 size={16} /></button>
