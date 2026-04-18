@@ -75,6 +75,21 @@ function App() {
     setIsSyncing(false);
   };
 
+  const getCurrentDate = () => {
+    const d = new Date();
+    // Força formato YYYY-MM-DD no fuso local do navegador
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  };
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    // Se a string vier apenas com YYYY-MM-DD, a adicionamos um horário no meio do dia
+    // para evitar que a conversão de fuso horário mova a data para o dia anterior
+    let safeDateStr = String(dateStr);
+    if (safeDateStr.length === 10) safeDateStr += 'T12:00:00';
+    return new Date(safeDateStr).toLocaleDateString('pt-BR');
+  };
+
   const handleMovement = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct || quantity <= 0) return;
@@ -82,13 +97,13 @@ function App() {
     const updatedProducts = products.map(p => {
       if (p.id === selectedProduct) {
         const newQty = modalType === 'entrada' ? Number(p.quantity) + Number(quantity) : Math.max(0, Number(p.quantity) - Number(quantity));
-        return { ...p, quantity: newQty, lastUpdate: new Date().toISOString().split('T')[0] };
+        return { ...p, quantity: newQty, lastUpdate: getCurrentDate() };
       }
       return p;
     });
 
     setProducts(updatedProducts);
-    syncWithSheets(updatedProducts); // Sincroniza!
+    syncWithSheets(updatedProducts);
 
     setIsMovementModalOpen(false);
     setSelectedProduct('');
@@ -126,7 +141,7 @@ function App() {
         category: productCategory as any,
         quantity: productQuantity,
         minQuantity: productMinQuantity,
-        lastUpdate: new Date().toISOString().split('T')[0]
+        lastUpdate: getCurrentDate()
       } : p);
     } else {
       const newProduct: Product = {
@@ -135,13 +150,13 @@ function App() {
         category: productCategory as any,
         quantity: productQuantity,
         minQuantity: productMinQuantity,
-        lastUpdate: new Date().toISOString().split('T')[0]
+        lastUpdate: getCurrentDate()
       };
       updatedProducts = [...products, newProduct];
     }
     
     setProducts(updatedProducts);
-    syncWithSheets(updatedProducts); // Sincroniza!
+    syncWithSheets(updatedProducts);
     setIsProductModalOpen(false);
   };
 
@@ -285,7 +300,7 @@ function App() {
                            Number(product.quantity) <= Number(product.minQuantity) ? <span className="badge badge-warning">Atenção</span> : 
                            <span className="badge badge-ok">Normal</span>}
                         </td>
-                        <td style={{ color: 'var(--text-muted)' }}>{new Date(product.lastUpdate).toLocaleDateString('pt-BR')}</td>
+                        <td style={{ color: 'var(--text-muted)' }}>{formatDate(String(product.lastUpdate))}</td>
                         <td>
                           <button className="btn-icon" onClick={() => openEditProduct(product)}><Pencil size={16} /></button>
                           <button className="btn-icon danger" onClick={() => setDeleteModal({ isOpen: true, type: 'product', targetId: product.id, targetName: product.name })}><Trash2 size={16} /></button>
