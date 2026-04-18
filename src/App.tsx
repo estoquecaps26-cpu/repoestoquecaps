@@ -13,8 +13,16 @@ function App() {
   // Modais e Estados
   const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'entrada' | 'saida'>('entrada');
+  const [selectedMovementCategory, setSelectedMovementCategory] = useState<string>('');
   const [selectedProduct, setSelectedProduct] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(0);
+
+  // Produtos filtrados pela categoria selecionada no modal de movimentação
+  const movementProducts = selectedMovementCategory
+    ? [...products]
+        .filter(p => p.category === selectedMovementCategory)
+        .sort((a, b) => a.name.localeCompare(b.name))
+    : [];
 
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isEditingProduct, setIsEditingProduct] = useState(false);
@@ -107,6 +115,7 @@ function App() {
 
     setIsMovementModalOpen(false);
     setSelectedProduct('');
+    setSelectedMovementCategory('');
     setQuantity(0);
   };
 
@@ -385,22 +394,49 @@ function App() {
               {modalType === 'entrada' ? <ArrowUpCircle /> : <ArrowDownCircle />} Registrar {modalType === 'entrada' ? 'Entrada' : 'Saída'}
             </h2>
             <form onSubmit={handleMovement}>
+              {/* PASSO 1: Selecionar a Categoria */}
               <div className="form-group">
-                <label>Selecione o Produto</label>
-                <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} required>
-                  <option value="">Escolha na lista...</option>
-                  {[...products].sort((a, b) => a.name.localeCompare(b.name)).map(p => (
-                    <option key={p.id} value={p.id}>{p.name} - {p.category} (Temos {p.quantity})</option>
+                <label>1. Selecione a Categoria</label>
+                <select
+                  value={selectedMovementCategory}
+                  onChange={(e) => { setSelectedMovementCategory(e.target.value); setSelectedProduct(''); }}
+                  required
+                >
+                  <option value="">Escolha a categoria...</option>
+                  {[...categories].sort((a, b) => a.localeCompare(b)).map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>
               </div>
-              <div className="form-group">
-                <label>Quantidade a {modalType === 'entrada' ? 'adicionar' : 'remover'}</label>
-                <input type="number" min="1" required value={quantity || ''} onChange={(e) => setQuantity(parseInt(e.target.value))} />
-              </div>
+
+              {/* PASSO 2: Selecionar o Produto (só aparece após escolher a categoria) */}
+              {selectedMovementCategory && (
+                <div className="form-group">
+                  <label>2. Selecione o Produto</label>
+                  {movementProducts.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', padding: '0.5rem 0' }}>Nenhum produto nesta categoria.</p>
+                  ) : (
+                    <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} required>
+                      <option value="">Escolha o produto...</option>
+                      {movementProducts.map(p => (
+                        <option key={p.id} value={p.id}>{p.name} (Temos: {Number(p.quantity)})</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+
+              {/* PASSO 3: Quantidade (só aparece após escolher o produto) */}
+              {selectedProduct && (
+                <div className="form-group">
+                  <label>3. Quantidade a {modalType === 'entrada' ? 'adicionar' : 'remover'}</label>
+                  <input type="number" min="1" required value={quantity || ''} onChange={(e) => setQuantity(parseInt(e.target.value))} />
+                </div>
+              )}
+
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
-                <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => setIsMovementModalOpen(false)}>Cancelar</button>
-                <button type="submit" className={`btn ${modalType === 'entrada' ? 'btn-success' : 'btn-danger'}`} style={{ flex: 1 }}>Confirmar</button>
+                <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => { setIsMovementModalOpen(false); setSelectedMovementCategory(''); setSelectedProduct(''); setQuantity(0); }}>Cancelar</button>
+                <button type="submit" className={`btn ${modalType === 'entrada' ? 'btn-success' : 'btn-danger'}`} style={{ flex: 1 }} disabled={!selectedProduct || !quantity}>Confirmar</button>
               </div>
             </form>
           </div>
