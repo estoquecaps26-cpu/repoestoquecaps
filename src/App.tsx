@@ -1,65 +1,94 @@
-import React, { useState } from 'react';
-import { Package, AlertTriangle, ArrowUpCircle, ArrowDownCircle, Plus, LayoutDashboard, FolderTree, FolderPlus, Pencil, Trash2 } from 'lucide-react';
-import { initialProducts, initialMovements } from './mockData';
-import type { Product, Movement } from './mockData';
+import React, { useState, useEffect } from 'react';
+import { Package, AlertTriangle, ArrowUpCircle, ArrowDownCircle, Plus, LayoutDashboard, FolderTree, FolderPlus, Pencil, Trash2, RefreshCw } from 'lucide-react';
+import type { Product } from './mockData';
+
+const GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyK0JxzkUdkZLXbm7JXSmSlXXYFP_8zDWiVayXL3B9sKOsZRs0mkreeCFHg0yaW202mew/exec';
 
 function App() {
-  // Estado das Categorias
   const [categories, setCategories] = useState<string[]>(['Limpeza', 'Higiene Pessoal', 'Oficinas', 'Enfermagem', 'Escritório']);
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [movements, setMovements] = useState<Movement[]>(initialMovements);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   
-  // Estados para movimentação (Entrada/Saída)
+  // Modais e Estados
   const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'entrada' | 'saida'>('entrada');
   const [selectedProduct, setSelectedProduct] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(0);
 
-  // Estados para Novo/Editar Produto
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isEditingProduct, setIsEditingProduct] = useState(false);
   const [editingProductId, setEditingProductId] = useState('');
   const [productName, setProductName] = useState('');
-  const [productCategory, setProductCategory] = useState(categories[0] || '');
+  const [productCategory, setProductCategory] = useState('');
   const [productQuantity, setProductQuantity] = useState(0);
   const [productMinQuantity, setProductMinQuantity] = useState(5);
 
-  // Estados para Nova/Editar Categoria
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isEditingCategory, setIsEditingCategory] = useState(false);
   const [editingCategoryOldName, setEditingCategoryOldName] = useState('');
   const [categoryName, setCategoryName] = useState('');
 
-  // Estados para Exclusão
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; type: 'product'|'category'; targetId: string; targetName: string }>({
     isOpen: false, type: 'product', targetId: '', targetName: ''
   });
 
-  // Contadores para o Dashboard
-  const zeroStockCount = products.filter(p => p.quantity === 0).length;
-  const lowStockCount = products.filter(p => p.quantity > 0 && p.quantity <= p.minQuantity).length;
+  // Carregar dados da planilha ao abrir o app
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(GOOGLE_SHEETS_URL);
+      const data = await response.json();
+      
+      if (Array.isArray(data) && data.length > 0 && data[0].id) {
+        setProducts(data);
+        
+        // Extrair categorias únicas vindas da planilha e mesclar com as padrões
+        const sheetCategories = data.map((p: any) => p.category);
+        const uniqueCategories = Array.from(new Set([...categories, ...sheetCategories]));
+        setCategories(uniqueCategories);
+      }
+    } catch (error) {
+      console.error("Erro ao buscar dados do Google Sheets:", error);
+    }
+    setIsLoading(false);
+  };
+
+  // Salvar dados na planilha
+  const syncWithSheets = async (updatedProducts: Product[]) => {
+    setIsSyncing(true);
+    try {
+      await fetch(GOOGLE_SHEETS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'ATUALIZAR_TUDO',
+          products: updatedProducts
+        })
+      });
+    } catch (error) {
+      console.error("Erro ao salvar dados no Google Sheets:", error);
+    }
+    setIsSyncing(false);
+  };
 
   const handleMovement = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct || quantity <= 0) return;
 
-    const newMovement: Movement = {
-      id: Math.random().toString(36).substr(2, 9),
-      productId: selectedProduct,
-      type: modalType,
-      quantity,
-      date: new Date().toISOString().split('T')[0],
-    };
-
-    setMovements([newMovement, ...movements]);
-
-    setProducts(products.map(p => {
+    const updatedProducts = products.map(p => {
       if (p.id === selectedProduct) {
-        const newQty = modalType === 'entrada' ? p.quantity + quantity : Math.max(0, p.quantity - quantity);
-        return { ...p, quantity: newQty, lastUpdate: newMovement.date };
+        const newQty = modalType === 'entrada' ? Number(p.quantity) + Number(quantity) : Math.max(0, Number(p.quantity) - Number(quantity));
+        return { ...p, quantity: newQty, lastUpdate: new Date().toISOString().split('T')[0] };
       }
       return p;
-    }));
+    });
+
+    setProducts(updatedProducts);
+    syncWithSheets(updatedProducts); // Sincroniza!
 
     setIsMovementModalOpen(false);
     setSelectedProduct('');
@@ -89,14 +118,16 @@ function App() {
     e.preventDefault();
     if (!productName || !productCategory) return;
 
+    let updatedProducts;
     if (isEditingProduct) {
-      setProducts(products.map(p => p.id === editingProductId ? {
+      updatedProducts = products.map(p => p.id === editingProductId ? {
         ...p,
         name: productName,
         category: productCategory as any,
         quantity: productQuantity,
-        minQuantity: productMinQuantity
-      } : p));
+        minQuantity: productMinQuantity,
+        lastUpdate: new Date().toISOString().split('T')[0]
+      } : p);
     } else {
       const newProduct: Product = {
         id: Math.random().toString(36).substr(2, 9),
@@ -106,9 +137,11 @@ function App() {
         minQuantity: productMinQuantity,
         lastUpdate: new Date().toISOString().split('T')[0]
       };
-      setProducts([...products, newProduct]);
+      updatedProducts = [...products, newProduct];
     }
     
+    setProducts(updatedProducts);
+    syncWithSheets(updatedProducts); // Sincroniza!
     setIsProductModalOpen(false);
   };
 
@@ -131,10 +164,11 @@ function App() {
 
     if (isEditingCategory) {
       if (categoryName !== editingCategoryOldName && !categories.includes(categoryName)) {
-        // Atualiza a lista de categorias
         setCategories(categories.map(c => c === editingCategoryOldName ? categoryName : c));
-        // Atualiza todos os produtos que tinham a categoria antiga
-        setProducts(products.map(p => p.category === editingCategoryOldName ? { ...p, category: categoryName as any } : p));
+        
+        const updatedProducts = products.map(p => p.category === editingCategoryOldName ? { ...p, category: categoryName as any } : p);
+        setProducts(updatedProducts);
+        syncWithSheets(updatedProducts); // Sincroniza se afetou produtos!
       }
     } else {
       if (!categories.includes(categoryName)) {
@@ -145,17 +179,22 @@ function App() {
   };
 
   const confirmDelete = () => {
+    let updatedProducts = products;
     if (deleteModal.type === 'product') {
-      setProducts(products.filter(p => p.id !== deleteModal.targetId));
+      updatedProducts = products.filter(p => p.id !== deleteModal.targetId);
     } else {
-      // Exclui a categoria e os produtos nela
       setCategories(categories.filter(c => c !== deleteModal.targetName));
-      setProducts(products.filter(p => p.category !== deleteModal.targetName));
+      updatedProducts = products.filter(p => p.category !== deleteModal.targetName);
     }
+    
+    setProducts(updatedProducts);
+    syncWithSheets(updatedProducts); // Sincroniza!
     setDeleteModal({ ...deleteModal, isOpen: false });
   };
 
-  // Agrupar produtos por categoria e organizar em ordem alfabética
+  const zeroStockCount = products.filter(p => Number(p.quantity) === 0).length;
+  const lowStockCount = products.filter(p => Number(p.quantity) > 0 && Number(p.quantity) <= Number(p.minQuantity)).length;
+
   const groupedProducts: Record<string, Product[]> = {};
   const activeCategories = [...categories].sort((a, b) => a.localeCompare(b));
 
@@ -164,6 +203,16 @@ function App() {
     groupedProducts[cat] = prodsInCat.sort((a, b) => a.name.localeCompare(b.name));
   });
 
+  if (isLoading) {
+    return (
+      <div className="app-container" style={{ justifyContent: 'center', alignItems: 'center' }}>
+        <RefreshCw className="w-12 h-12" color="var(--primary-color)" style={{ animation: 'spin 1s linear infinite' }} />
+        <h2 style={{ marginTop: '1rem', color: 'var(--text-muted)' }}>Conectando à Planilha...</h2>
+        <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
   return (
     <div className="app-container">
       <header className="header glass">
@@ -171,77 +220,47 @@ function App() {
           <Package className="w-6 h-6" color="var(--primary-color)" />
           Estoque CAPS
         </h1>
+        {isSyncing && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+            <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} /> Salvando...
+          </span>
+        )}
       </header>
 
       <main className="main-content">
-        {/* DASHBOARD */}
         <div className="dashboard-grid">
           <div className="stat-card glass">
-            <div className="stat-header">
-              <span>Total de Itens Diferentes</span>
-              <LayoutDashboard size={20} />
-            </div>
+            <div className="stat-header"><span>Total de Itens</span><LayoutDashboard size={20} /></div>
             <div className="stat-value">{products.length}</div>
           </div>
-          
           <div className="stat-card glass">
-            <div className="stat-header">
-              <span>Atenção (Estoque Baixo)</span>
-              <AlertTriangle size={20} color={lowStockCount > 0 ? "var(--warning)" : "var(--text-muted)"} />
-            </div>
-            <div className="stat-value" style={{ color: lowStockCount > 0 ? 'var(--warning)' : 'inherit' }}>
-              {lowStockCount}
-            </div>
+            <div className="stat-header"><span>Atenção (Estoque Baixo)</span><AlertTriangle size={20} color={lowStockCount > 0 ? "var(--warning)" : "var(--text-muted)"} /></div>
+            <div className="stat-value" style={{ color: lowStockCount > 0 ? 'var(--warning)' : 'inherit' }}>{lowStockCount}</div>
           </div>
-
           <div className="stat-card glass">
-            <div className="stat-header">
-              <span>Crítico (Zerados)</span>
-              <AlertTriangle size={20} color={zeroStockCount > 0 ? "var(--danger)" : "var(--text-muted)"} />
-            </div>
-            <div className="stat-value" style={{ color: zeroStockCount > 0 ? 'var(--danger)' : 'inherit' }}>
-              {zeroStockCount}
-            </div>
+            <div className="stat-header"><span>Crítico (Zerados)</span><AlertTriangle size={20} color={zeroStockCount > 0 ? "var(--danger)" : "var(--text-muted)"} /></div>
+            <div className="stat-value" style={{ color: zeroStockCount > 0 ? 'var(--danger)' : 'inherit' }}>{zeroStockCount}</div>
           </div>
         </div>
 
-        {/* BOTÕES DE AÇÃO */}
         <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
-          <button className="btn btn-outline" style={{ background: 'var(--surface-color)' }} onClick={openNewCategory}>
-            <FolderPlus size={18} /> Nova Categoria
-          </button>
-          <button className="btn btn-primary" onClick={openNewProduct}>
-            <Plus size={18} /> Novo Produto
-          </button>
-          <button className="btn btn-success" onClick={() => { setModalType('entrada'); setIsMovementModalOpen(true); }}>
-            <ArrowUpCircle size={18} /> Registrar Entrada
-          </button>
-          <button className="btn btn-danger" onClick={() => { setModalType('saida'); setIsMovementModalOpen(true); }}>
-            <ArrowDownCircle size={18} /> Registrar Saída
-          </button>
+          <button className="btn btn-outline" style={{ background: 'var(--surface-color)' }} onClick={openNewCategory}><FolderPlus size={18} /> Nova Categoria</button>
+          <button className="btn btn-primary" onClick={openNewProduct}><Plus size={18} /> Novo Produto</button>
+          <button className="btn btn-success" onClick={() => { setModalType('entrada'); setIsMovementModalOpen(true); }}><ArrowUpCircle size={18} /> Registrar Entrada</button>
+          <button className="btn btn-danger" onClick={() => { setModalType('saida'); setIsMovementModalOpen(true); }}><ArrowDownCircle size={18} /> Registrar Saída</button>
         </div>
 
-        {/* LISTAGEM POR CATEGORIA */}
         {activeCategories.map(category => (
           <div key={category} className="table-container">
             <div className="category-header">
-              <div className="category-header-title">
-                <FolderTree size={20} color="var(--primary-color)" />
-                {category}
-              </div>
+              <div className="category-header-title"><FolderTree size={20} color="var(--primary-color)" />{category}</div>
               <div className="category-header-actions">
-                <button className="btn-icon" onClick={() => openEditCategory(category)} title="Editar Categoria">
-                  <Pencil size={16} />
-                </button>
-                <button className="btn-icon danger" onClick={() => setDeleteModal({ isOpen: true, type: 'category', targetId: category, targetName: category })} title="Excluir Categoria">
-                  <Trash2 size={16} />
-                </button>
+                <button className="btn-icon" onClick={() => openEditCategory(category)}><Pencil size={16} /></button>
+                <button className="btn-icon danger" onClick={() => setDeleteModal({ isOpen: true, type: 'category', targetId: category, targetName: category })}><Trash2 size={16} /></button>
               </div>
             </div>
             {groupedProducts[category].length === 0 ? (
-              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-                Nenhum produto cadastrado nesta categoria ainda.
-              </div>
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem' }}>Nenhum produto cadastrado nesta categoria ainda.</div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table className="data-table">
@@ -262,24 +281,14 @@ function App() {
                         <td style={{ fontWeight: 700, fontSize: '1rem' }}>{product.quantity}</td>
                         <td style={{ color: 'var(--text-muted)' }}>{product.minQuantity}</td>
                         <td>
-                          {product.quantity === 0 ? (
-                            <span className="badge badge-danger">Zerado</span>
-                          ) : product.quantity <= product.minQuantity ? (
-                            <span className="badge badge-warning">Atenção</span>
-                          ) : (
-                            <span className="badge badge-ok">Normal</span>
-                          )}
+                          {Number(product.quantity) === 0 ? <span className="badge badge-danger">Zerado</span> : 
+                           Number(product.quantity) <= Number(product.minQuantity) ? <span className="badge badge-warning">Atenção</span> : 
+                           <span className="badge badge-ok">Normal</span>}
                         </td>
-                        <td style={{ color: 'var(--text-muted)' }}>
-                          {new Date(product.lastUpdate).toLocaleDateString('pt-BR')}
-                        </td>
+                        <td style={{ color: 'var(--text-muted)' }}>{new Date(product.lastUpdate).toLocaleDateString('pt-BR')}</td>
                         <td>
-                          <button className="btn-icon" onClick={() => openEditProduct(product)} title="Editar Produto">
-                            <Pencil size={16} />
-                          </button>
-                          <button className="btn-icon danger" onClick={() => setDeleteModal({ isOpen: true, type: 'product', targetId: product.id, targetName: product.name })} title="Excluir Produto">
-                            <Trash2 size={16} />
-                          </button>
+                          <button className="btn-icon" onClick={() => openEditProduct(product)}><Pencil size={16} /></button>
+                          <button className="btn-icon danger" onClick={() => setDeleteModal({ isOpen: true, type: 'product', targetId: product.id, targetName: product.name })}><Trash2 size={16} /></button>
                         </td>
                       </tr>
                     ))}
@@ -291,6 +300,7 @@ function App() {
         ))}
       </main>
 
+      {/* Modais omitidos para brevidade no script principal, mas são os mesmos de antes com as variáveis mantidas. */}
       {/* MODAL DE CATEGORIA (Novo/Editar) */}
       {isCategoryModalOpen && (
         <div className="modal-overlay">
@@ -298,15 +308,10 @@ function App() {
             <h2 style={{ marginBottom: '1.5rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <FolderPlus /> {isEditingCategory ? 'Editar Categoria' : 'Cadastrar Categoria'}
             </h2>
-            
             <form onSubmit={handleSaveCategory}>
               <div className="form-group">
                 <label>Nome da Categoria</label>
-                <input 
-                  type="text" required placeholder="Ex: Roupas"
-                  value={categoryName}
-                  onChange={(e) => setCategoryName(e.target.value)}
-                />
+                <input type="text" required placeholder="Ex: Roupas" value={categoryName} onChange={(e) => setCategoryName(e.target.value)} />
               </div>
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
                 <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => setIsCategoryModalOpen(false)}>Cancelar</button>
@@ -324,17 +329,11 @@ function App() {
             <h2 style={{ marginBottom: '1.5rem', color: 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Plus /> {isEditingProduct ? 'Editar Produto' : 'Cadastrar Novo Produto'}
             </h2>
-            
             <form onSubmit={handleSaveProduct}>
               <div className="form-group">
                 <label>Nome do Produto</label>
-                <input 
-                  type="text" required placeholder="Ex: Álcool 70%"
-                  value={productName}
-                  onChange={(e) => setProductName(e.target.value)}
-                />
+                <input type="text" required placeholder="Ex: Álcool 70%" value={productName} onChange={(e) => setProductName(e.target.value)} />
               </div>
-
               <div className="form-group">
                 <label>Categoria</label>
                 <select value={productCategory} onChange={(e) => setProductCategory(e.target.value)} required>
@@ -344,27 +343,16 @@ function App() {
                   ))}
                 </select>
               </div>
-
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
                   <label>Estoque Atual</label>
-                  <input 
-                    type="number" min="0" required
-                    value={productQuantity}
-                    onChange={(e) => setProductQuantity(parseInt(e.target.value) || 0)}
-                  />
+                  <input type="number" min="0" required value={productQuantity} onChange={(e) => setProductQuantity(parseInt(e.target.value) || 0)} />
                 </div>
-
                 <div className="form-group">
                   <label style={{ color: 'var(--warning)' }}>Limite de Alerta</label>
-                  <input 
-                    type="number" min="0" required
-                    value={productMinQuantity}
-                    onChange={(e) => setProductMinQuantity(parseInt(e.target.value) || 0)}
-                  />
+                  <input type="number" min="0" required value={productMinQuantity} onChange={(e) => setProductMinQuantity(parseInt(e.target.value) || 0)} />
                 </div>
               </div>
-
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
                 <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => setIsProductModalOpen(false)}>Cancelar</button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={categories.length === 0}>Salvar</button>
@@ -379,10 +367,8 @@ function App() {
         <div className="modal-overlay">
           <div className="modal-content glass">
             <h2 style={{ marginBottom: '1.5rem', color: modalType === 'entrada' ? 'var(--success)' : 'var(--danger)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              {modalType === 'entrada' ? <ArrowUpCircle /> : <ArrowDownCircle />}
-              Registrar {modalType === 'entrada' ? 'Entrada' : 'Saída'}
+              {modalType === 'entrada' ? <ArrowUpCircle /> : <ArrowDownCircle />} Registrar {modalType === 'entrada' ? 'Entrada' : 'Saída'}
             </h2>
-            
             <form onSubmit={handleMovement}>
               <div className="form-group">
                 <label>Selecione o Produto</label>
@@ -393,16 +379,10 @@ function App() {
                   ))}
                 </select>
               </div>
-
               <div className="form-group">
                 <label>Quantidade a {modalType === 'entrada' ? 'adicionar' : 'remover'}</label>
-                <input 
-                  type="number" min="1" required
-                  value={quantity || ''}
-                  onChange={(e) => setQuantity(parseInt(e.target.value))}
-                />
+                <input type="number" min="1" required value={quantity || ''} onChange={(e) => setQuantity(parseInt(e.target.value))} />
               </div>
-
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
                 <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => setIsMovementModalOpen(false)}>Cancelar</button>
                 <button type="submit" className={`btn ${modalType === 'entrada' ? 'btn-success' : 'btn-danger'}`} style={{ flex: 1 }}>Confirmar</button>
