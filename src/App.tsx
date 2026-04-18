@@ -293,7 +293,7 @@ function App() {
                     {groupedProducts[category].map(product => (
                       <tr key={product.id}>
                         <td style={{ fontWeight: 600 }}>{product.name}</td>
-                        <td style={{ fontWeight: 700, fontSize: '1rem' }}>{product.quantity}</td>
+                        <td style={{ fontWeight: 700, fontSize: '1rem' }}>{String(product.quantity) === '' ? '0' : Number(product.quantity)}</td>
                         <td style={{ color: 'var(--text-muted)' }}>{product.minQuantity}</td>
                         <td>
                           {Number(product.quantity) === 0 ? <span className="badge badge-danger">Zerado</span> : 
