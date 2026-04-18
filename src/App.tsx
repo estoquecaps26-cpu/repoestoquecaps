@@ -358,7 +358,7 @@ function App() {
                   ))}
                 </select>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="form-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
                   <label>Estoque Atual</label>
                   <input type="number" min="0" required value={productQuantity} onChange={(e) => setProductQuantity(parseInt(e.target.value) || 0)} />

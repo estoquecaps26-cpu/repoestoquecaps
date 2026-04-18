@@ -228,18 +228,21 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  zIndex: 100;
+  z-index: 100;
   backdrop-filter: blur(4px);
+  padding: 1rem;
+  overflow-y: auto;
 }
 
 .modal-content {
   background: var(--surface-color);
-  padding: 2rem;
+  padding: 1.5rem;
   border-radius: var(--radius-lg);
-  width: 90%;
+  width: 100%;
   max-width: 450px;
   max-height: 90vh;
   overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .form-group {
@@ -271,4 +274,20 @@ body {
 @media (max-width: 768px) {
   .header { padding: 1rem; }
   .main-content { padding: 1rem; }
+
+  .modal-overlay {
+    align-items: flex-start;
+    padding: 1rem 0.75rem;
+  }
+
+  .modal-content {
+    padding: 1.25rem;
+    max-height: none;
+    width: 100%;
+  }
+
+  /* Grid de 2 colunas vira 1 coluna no celular */
+  .modal-content .form-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
 }
